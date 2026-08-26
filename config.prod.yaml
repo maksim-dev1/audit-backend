@@ -1,0 +1,14 @@
+server:
+  listen_addr: ":8080"
+
+database:
+  # Полная строка подключения — из diskman (раздел audit-backend на nexus).
+  dsn: "${DATABASE_DSN}"
+
+auth:
+  # Статический ключ приложения (Authorization: Bearer <key>), см. §3 гайда.
+  api_key: "${AUDIT_API_KEY}"
+
+retention:
+  # Сколько дней хранить записи в audit_logs (см. §4 гайда).
+  days: 90

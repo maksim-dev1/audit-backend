@@ -1,0 +1,14 @@
+server:
+  listen_addr: ":8080"
+
+database:
+  # Строка подключения Postgres. Секрет — через переменную окружения.
+  dsn: "postgres://audit:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/audit?sslmode=disable"
+
+auth:
+  # Статический ключ приложения (Authorization: Bearer <key>), см. §3 гайда.
+  api_key: "${AUDIT_API_KEY}"
+
+retention:
+  # Сколько дней хранить записи в audit_logs (см. §4 гайда).
+  days: 90

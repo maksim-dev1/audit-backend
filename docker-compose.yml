@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: audit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-audit}
+      POSTGRES_DB: audit
+    ports:
+      - "5432:5432"
+    volumes:
+      - audit_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U audit -d audit"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      CONFIG_PATH: /app/config.yaml
+      POSTGRES_HOST: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-audit}
+      AUDIT_API_KEY: ${AUDIT_API_KEY:?set AUDIT_API_KEY}
+    volumes:
+      - ./config.example.yaml:/app/config.yaml:ro
+
+volumes:
+  audit_pgdata:

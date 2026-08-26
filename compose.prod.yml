@@ -1,0 +1,16 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    # Порт наружу на хост — доступ к вьюверу/read-API ТОЛЬКО по Tailscale
+    # (http://100.104.42.19:18090/), публичного домена на весь сервис нет.
+    # Домен audit.pixelio.tech даёт Caddy на VPS только к /audit/batch —
+    # см. infrastructure-pixelio-tech.md.
+    ports:
+      - "18090:8080"
+    environment:
+      CONFIG_PATH: /app/config.yaml
+      DATABASE_DSN: ${DATABASE_DSN}
+      AUDIT_API_KEY: ${AUDIT_API_KEY}
