@@ -1006,6 +1006,10 @@ class Viewer {
     if (httpToggle) httpToggle.addEventListener('click', () => {
       const isHttpOnly = s.activeCats.size === 1 && s.activeCats.has('http');
       s.activeCats = isHttpOnly ? new Set() : new Set(['http']);
+      // http — не action-категория и не Mission*, поэтому scope=actions или
+      // missionOnly вместе с category=http всегда дают пустой результат —
+      // сбрасываем их при включении фильтра.
+      if (!isHttpOnly) { s.scope = 'all'; s.missionOnly = false; }
       this.reloadLogs();
     });
 
