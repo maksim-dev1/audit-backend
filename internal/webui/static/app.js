@@ -491,6 +491,10 @@ class Viewer {
           ? 'background:oklch(0.75 0.14 250 / 0.2);border-color:oklch(0.75 0.14 250 / 0.5);color:oklch(0.85 0.12 250)'
           : 'background:#ffffff0a;border-color:#ffffff18;color:#9298a1'}">Только заявки</button>
 
+        <button class="mission-toggle" data-toggle-http style="${s.activeCats.size === 1 && s.activeCats.has('http')
+          ? 'background:oklch(0.75 0.13 160 / 0.2);border-color:oklch(0.75 0.13 160 / 0.5);color:oklch(0.85 0.12 160)'
+          : 'background:#ffffff0a;border-color:#ffffff18;color:#9298a1'}">Только HTTP</button>
+
         <div class="cat-menu-wrap">
           <button class="cat-menu-btn pt-item" data-toggle-catmenu style="background:${catActive ? 'oklch(0.75 0.14 250 / 0.16)' : '#15181d'};border-color:${catActive ? 'oklch(0.75 0.14 250 / 0.45)' : '#ffffff1a'};color:${catActive ? 'oklch(0.86 0.1 250)' : '#9298a1'}">${escapeHtml(catLabel)}<span style="color:#6b7178;font:10px system-ui">▾</span></button>
           ${s.catMenuOpen ? `
@@ -668,8 +672,9 @@ class Viewer {
       const code = p.statusCode;
       if (code !== undefined) fact('статус', String(code), code >= 500 ? bad : code >= 400 ? warn : good);
       if (p.method) fact('метод', p.method, neutral);
+      if (p.path) fact('путь', p.path, neutral);
       if (p.durationMs !== undefined) fact('время', `${p.durationMs} мс`, p.durationMs > 1000 ? warn : neutral);
-      ['statusCode', 'method', 'durationMs', 'path'].forEach((k) => consumed.add(k));
+      ['statusCode', 'method', 'durationMs'].forEach((k) => consumed.add(k));
     } else if (row.category === 'tap' || row.category === 'swipe') {
       if (p.route !== undefined) fact('экран', p.route || '—', neutral);
       if (p.x !== undefined) fact('координаты', `${Math.round(p.x)} × ${Math.round(p.y || 0)}`, neutral);
@@ -704,6 +709,30 @@ class Viewer {
     const { facts, consumed } = this.buildFacts(row, p);
     const textBlocks = [];
     const trees = [];
+    const rowKey = (k) => `${row.id}:${k}`;
+    // Реестр «сырых» значений для кнопок копирования (см. bind → data-copy-text/-tree) —
+    // рендерим один раз здесь, обработчики клика просто читают по ключу.
+    this.copyRegistry = {};
+
+    // HTTP-запросы/ответы — отдельные блоки с телом, не просто факты в шапке
+    // (см. запрос «просматривать тело http запросов и ответов»).
+    if (row.category === 'http' && p) {
+      consumed.add('path');
+      if (p.query && typeof p.query === 'object' && Object.keys(p.query).length) {
+        trees.push({ key: 'query', title: 'Query-параметры', value: p.query });
+      }
+      consumed.add('query');
+      if (p.requestBody !== undefined && p.requestBody !== null) {
+        consumed.add('requestBody');
+        if (typeof p.requestBody === 'object') trees.push({ key: 'requestBody', title: 'Тело запроса', value: p.requestBody });
+        else textBlocks.push({ key: 'requestBody', title: 'Тело запроса', text: String(p.requestBody), note: `${String(p.requestBody).length} символов` });
+      } else consumed.add('requestBody');
+      if (p.responseBody !== undefined && p.responseBody !== null) {
+        consumed.add('responseBody');
+        if (typeof p.responseBody === 'object') trees.push({ key: 'responseBody', title: 'Ответ сервера', value: p.responseBody });
+        else textBlocks.push({ key: 'responseBody', title: 'Ответ сервера', text: String(p.responseBody), note: '' });
+      } else consumed.add('responseBody');
+    }
 
     if (p && typeof p === 'object') {
       if (p.exception) { textBlocks.push({ key: 'exception', title: 'Исключение', text: String(p.exception), note: '' }); consumed.add('exception'); }
@@ -714,13 +743,15 @@ class Viewer {
       }
       const rest = {};
       Object.entries(p).forEach(([k, v]) => { if (!consumed.has(k)) rest[k] = v; });
-      if (Object.keys(rest).length) trees.push({ key: 'payload', title: facts.length ? 'Остальной payload' : 'Payload', value: rest });
+      if (Object.keys(rest).length) trees.push({ key: 'payload', title: facts.length || trees.length || textBlocks.length ? 'Остальной payload' : 'Payload', value: rest });
     } else if (typeof row.payload === 'string' && row.payload) {
       textBlocks.push({ key: 'payloadRaw', title: 'Payload (не JSON)', text: row.payload, note: '' });
     }
 
+    textBlocks.forEach((b) => { this.copyRegistry[rowKey(b.key)] = b.text; });
+    trees.forEach((t) => { this.copyRegistry[rowKey(t.key)] = t.value; });
+
     const T = s.expandedText;
-    const rowKey = (k) => `${row.id}:${k}`;
     const finishedTextBlocks = textBlocks.map((b) => {
       const full = b.text;
       const limit = 1200;
@@ -971,6 +1002,12 @@ class Viewer {
     });
     const missionToggle = root.querySelector('[data-toggle-mission]');
     if (missionToggle) missionToggle.addEventListener('click', () => { s.missionOnly = !s.missionOnly; this.reloadLogs(); });
+    const httpToggle = root.querySelector('[data-toggle-http]');
+    if (httpToggle) httpToggle.addEventListener('click', () => {
+      const isHttpOnly = s.activeCats.size === 1 && s.activeCats.has('http');
+      s.activeCats = isHttpOnly ? new Set() : new Set(['http']);
+      this.reloadLogs();
+    });
 
     const toggleCatMenu = root.querySelector('[data-toggle-catmenu]');
     if (toggleCatMenu) toggleCatMenu.addEventListener('click', () => { s.catMenuOpen = !s.catMenuOpen; this.render(); });
@@ -1035,24 +1072,15 @@ class Viewer {
     root.querySelectorAll('[data-copy-text]').forEach((el) => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
-        const row = s.rows.find((r) => r.id === s.selectedRowId);
-        if (!row) return;
         const key = el.getAttribute('data-copy-text');
-        const field = key.split(':').slice(1).join(':');
-        const p = row.payload || {};
-        const text = field === 'exception' ? String(p.exception) : field === 'stackTrace' ? String(p.stackTrace) : field === 'payloadRaw' ? String(row.payload) : '';
-        this.copyText(text, key);
+        this.copyText(this.copyRegistry[key] ?? '', key);
       });
     });
     root.querySelectorAll('[data-copy-tree]').forEach((el) => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
-        const row = s.rows.find((r) => r.id === s.selectedRowId);
-        if (!row) return;
         const key = el.getAttribute('data-copy-tree');
-        const p = row.payload || {};
-        const value = p; // единственное дерево на панели — «остальной payload»
-        this.copyText(JSON.stringify(value, null, 2), key);
+        this.copyText(JSON.stringify(this.copyRegistry[key] ?? {}, null, 2), key);
       });
     });
     root.querySelectorAll('[data-expand-text]').forEach((el) => {
