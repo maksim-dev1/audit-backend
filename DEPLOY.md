@@ -9,9 +9,16 @@
 
 ## 1. Универсальный (`compose.yml`)
 
+env-переменные:
+
+| Переменная | Обязательна | Дефолт | Что |
+|---|---|---|---|
+| `AUDIT_API_KEY` | да | нет | ключ приложения, `Authorization: Bearer <key>` на `/audit/batch` |
+| `POSTGRES_PASSWORD` | нет | `audit` | пароль для поднимаемого сервисом Postgres — сменить вне локальной разработки |
+
 ```bash
-export AUDIT_API_KEY=$(openssl rand -hex 32)   # обязателен, без дефолта
-export POSTGRES_PASSWORD=$(openssl rand -hex 16)  # опционален, дефолт "audit"
+export AUDIT_API_KEY=$(openssl rand -hex 32)
+export POSTGRES_PASSWORD=$(openssl rand -hex 16)
 
 docker compose up -d --build
 ```
@@ -30,6 +37,13 @@ curl http://localhost:8080/audit/technicians   # -> []
 
 ## 2. Прод с внешней БД (`compose.prod.yml`)
 
+env-переменные:
+
+| Переменная | Обязательна | Дефолт | Что |
+|---|---|---|---|
+| `AUDIT_API_KEY` | да | нет | ключ приложения, `Authorization: Bearer <key>` на `/audit/batch` |
+| `DATABASE_DSN` | да | нет | полная строка подключения к внешнему Postgres |
+
 ```bash
 export DATABASE_DSN="postgres://user:pass@host:5432/audit?sslmode=require"
 export AUDIT_API_KEY=$(openssl rand -hex 32)
@@ -41,17 +55,7 @@ docker compose -f compose.prod.yml up -d --build
 про сеть доступа — см. сам файл), под другую инфраструктуру просто
 поправь `ports:` под себя.
 
-## Обязательные env-переменные
-
-- `AUDIT_API_KEY` — статический ключ приложения (`Authorization: Bearer <key>`
-  на `/audit/batch`). Один ключ на всё приложение, не на пользователя.
-  Генерировать через `openssl rand -hex 32`, не коммитить.
-- `DATABASE_DSN` (только `compose.prod.yml`) — полная строка подключения
-  Postgres.
-- `POSTGRES_PASSWORD` (только `compose.yml`) — пароль для своего Postgres,
-  дефолт `audit` — обязательно сменить вне локальной разработки.
-
-## Сеть и безопасность
+## Сеть и безопасность (оба сценария)
 
 - Read-API (`/audit/technicians`, `/audit/logs`, веб-вьювер на `GET /`) —
   **без авторизации**. Не открывать в публичный интернет как есть — только
@@ -65,7 +69,7 @@ docker compose -f compose.prod.yml up -d --build
   в `/audit/batch` общий на все клиенты (не per-IP) — см.
   `cmd/server/main.go` (`rateLimitPerSecond`/`rateLimitBurst`).
 
-## Retention
+## Retention (оба сценария)
 
 Настраивается в `config.yaml` (`retention.days`, дефолт 7). Чистка старых
 записей — фоновая горутина, раз в сутки + сразу при старте сервиса.
