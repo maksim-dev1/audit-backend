@@ -37,10 +37,25 @@ function categoryColor(category, alpha = 1) {
   return `oklch(0.75 0.13 ${hue} / ${alpha})`;
 }
 
-function fmtHms(iso) { return new Date(iso).toISOString().slice(11, 19); }
-function fmtMs(iso) { return new Date(iso).toISOString().slice(19, 23); }
-function fmtMinute(iso) { return new Date(iso).toISOString().slice(11, 16); }
-function fmtFullTime(iso) { return new Date(iso).toISOString().replace('T', ' ').slice(0, 23) + ' UTC'; }
+// Локальное время браузера (не UTC) — паддинг вручную, т.к. toLocaleString
+// не даёт стабильного формата HH:MM:SS.mmm across браузеров.
+const pad = (n, len = 2) => String(n).padStart(len, '0');
+function fmtHms(iso) {
+  const d = new Date(iso);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+function fmtMs(iso) { return '.' + pad(new Date(iso).getMilliseconds(), 3); }
+function fmtMinute(iso) {
+  const d = new Date(iso);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function fmtFullTime(iso) {
+  const d = new Date(iso);
+  const tz = -d.getTimezoneOffset();
+  const sign = tz >= 0 ? '+' : '-';
+  const tzStr = `UTC${sign}${pad(Math.floor(Math.abs(tz) / 60))}:${pad(Math.abs(tz) % 60)}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)} ${tzStr}`;
+}
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -564,7 +579,7 @@ class Viewer {
 
     const hourTicks = [];
     const step = span > 3600000 ? 1800000 : 60000;
-    const start = new Date(rows[0].timestamp); start.setUTCSeconds(0, 0);
+    const start = new Date(rows[0].timestamp); start.setSeconds(0, 0);
     for (let c = start.getTime(); c <= t1; c += step) {
       const left = ((c - t0) / span) * 100;
       if (left < 0) continue;
