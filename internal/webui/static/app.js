@@ -368,9 +368,13 @@ class Viewer {
     this.render();
   }
 
-  toggleTreePath(path) {
-    const cur = this.state.toggles[path];
-    this.state.toggles = { ...this.state.toggles, [path]: cur === undefined ? false : !cur };
+  // curOpen — фактическое состояние узла на момент рендера (см. data-tree-open):
+  // раньше тут угадывали по toggles[path]===undefined, что для изначально
+  // свёрнутых узлов (глубокие ветки, «показать ещё N») делало первый клик
+  // невидимым — приходилось кликать дважды (см. запрос «данные доступны не
+  // все»). Теперь просто инвертируем то, что реально нарисовано.
+  toggleTreePath(path, curOpen) {
+    this.state.toggles = { ...this.state.toggles, [path]: !curOpen };
     this.render();
   }
 
@@ -820,10 +824,10 @@ class Viewer {
       const nodes = rawNodes.map((n) => {
         const indent = 12 + n.depth * 14;
         if (n.moreCount !== undefined) {
-          return { indent, chev: '', key: '', value: `… ещё ${n.moreCount}`, keyColor: '#5c626c', valColor: '#6ea8fe', cursor: 'pointer', more: 'показать', path: n.path };
+          return { indent, chev: '', key: '', value: `… ещё ${n.moreCount}`, keyColor: '#5c626c', valColor: '#6ea8fe', cursor: 'pointer', more: 'показать', path: n.path, curOpen: false };
         }
         if (n.branch) {
-          return { indent, chev: n.open ? '▾' : '▸', key: n.key === '' ? '' : `${n.key}:`, value: n.preview, keyColor: '#c7cad0', valColor: '#5c626c', cursor: 'pointer', more: '', path: n.path };
+          return { indent, chev: n.open ? '▾' : '▸', key: n.key === '' ? '' : `${n.key}:`, value: n.preview, keyColor: '#c7cad0', valColor: '#5c626c', cursor: 'pointer', more: '', path: n.path, curOpen: n.open };
         }
         const v = n.value;
         let text, color;
@@ -838,7 +842,7 @@ class Viewer {
         return {
           indent, chev: '', key: n.key === '' ? '' : `${n.key}:`, value: shown, keyColor: '#8f96a0', valColor: color,
           cursor: long ? 'pointer' : 'default', more: long ? (open ? 'свернуть' : `+${text.length - 130} символов`) : '',
-          path: long ? `expand:${n.path}` : null,
+          path: null, expandPath: long ? n.path : null,
         };
       });
       return { title: t.title, note: `${lines.toLocaleString('ru-RU')} строк JSON`, nodes, key: t.key, copyLabel: s.copiedKey === rowKey(t.key) ? 'скопировано ✓' : 'копировать JSON', json };
@@ -912,7 +916,7 @@ class Viewer {
               </div>
               <div class="tree-box pt-scroll">
                 ${tr.nodes.map((n) => `
-                  <div class="tree-node pt-node" ${n.path ? `data-tree-toggle="${escapeHtml(n.path)}"` : ''} style="padding-left:${n.indent}px;cursor:${n.cursor}">
+                  <div class="tree-node pt-node" ${n.path ? `data-tree-toggle="${escapeHtml(n.path)}" data-tree-open="${n.curOpen ? '1' : '0'}"` : ''} ${n.expandPath ? `data-expand-toggle="${escapeHtml(n.expandPath)}"` : ''} style="padding-left:${n.indent}px;cursor:${n.cursor}">
                     <span class="tree-chev">${n.chev}</span>
                     ${n.key ? `<span class="tree-key" style="color:${n.keyColor}">${escapeHtml(n.key)}</span>` : ''}
                     <span class="tree-value" style="color:${n.valColor}">${escapeHtml(n.value)}</span>
@@ -1128,8 +1132,15 @@ class Viewer {
     root.querySelectorAll('[data-tree-toggle]').forEach((el) => {
       el.addEventListener('click', () => {
         const path = el.getAttribute('data-tree-toggle');
-        const real = path.startsWith('expand:') ? path.slice(7) : path;
-        this.toggleTreePath(real);
+        const curOpen = el.getAttribute('data-tree-open') === '1';
+        this.toggleTreePath(path, curOpen);
+      });
+    });
+    root.querySelectorAll('[data-expand-toggle]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const key = el.getAttribute('data-expand-toggle');
+        s.expandedText = { ...s.expandedText, [key]: !s.expandedText[key] };
+        this.render();
       });
     });
     const toggleRaw = root.querySelector('[data-toggle-raw]');
