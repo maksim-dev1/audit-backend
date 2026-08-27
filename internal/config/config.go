@@ -62,7 +62,7 @@ func (c *Config) applyDefaults() {
 		c.Server.ListenAddr = ":8080"
 	}
 	if c.Retention.Days == 0 {
-		c.Retention.Days = 90
+		c.Retention.Days = 7
 	}
 }
 

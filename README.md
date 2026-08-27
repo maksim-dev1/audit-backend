@@ -5,7 +5,7 @@ HTTP-приёмник audit-логов rs_tech — замена тестовог
 [`fieldlog`](https://github.com/maksim-dev1/fieldlog.git)). Контракт и
 рационале — [`AUDIT_BACKEND_GUIDE.md`](../rs_tech/docs/guides/AUDIT_BACKEND_GUIDE.md).
 
-## Запуск (docker-compose)
+## Запуск (docker compose)
 
 ```bash
 export AUDIT_API_KEY=change-me

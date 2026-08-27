@@ -11,4 +11,4 @@ auth:
 
 retention:
   # Сколько дней хранить записи в audit_logs (см. §4 гайда).
-  days: 90
+  days: 7

@@ -103,6 +103,16 @@ func runRetention(ctx context.Context, st *store.Store, retention time.Duration,
 	if retention <= 0 {
 		return
 	}
+	cleanup := func() {
+		cutoff := time.Now().Add(-retention)
+		n, err := st.DeleteOlderThan(ctx, cutoff)
+		if err != nil {
+			log.Error("retention cleanup failed", "err", err)
+			return
+		}
+		log.Info("retention cleanup done", "deleted", n, "cutoff", cutoff)
+	}
+	cleanup() // сразу при старте — не ждать первый тик, если сервис долго не рестартовали
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	for {
@@ -110,13 +120,7 @@ func runRetention(ctx context.Context, st *store.Store, retention time.Duration,
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			cutoff := time.Now().Add(-retention)
-			n, err := st.DeleteOlderThan(ctx, cutoff)
-			if err != nil {
-				log.Error("retention cleanup failed", "err", err)
-				continue
-			}
-			log.Info("retention cleanup done", "deleted", n, "cutoff", cutoff)
+			cleanup()
 		}
 	}
 }
