@@ -114,7 +114,7 @@ class Viewer {
       technicians: [], activeUserId: null, pickerOpen: false, techSearch: '',
       rows: [], hasMoreOlder: false, loadingOlder: false, loading: true, error: null,
       categories: [], timeline: [],
-      search: '', activeCats: new Set(), scope: 'all', missionOnly: false,
+      search: '', activeCats: new Set(), scope: 'all',
       catMenuOpen: false, range: null, dragFrom: null, dragTo: null, hoverX: null,
       selectedRowId: null, shortcutsOpen: false,
       toggles: {}, expandedText: {}, copiedKey: null, copied: false, rawOpen: false,
@@ -151,7 +151,6 @@ class Viewer {
       search: s.search,
       actionsOnly: s.scope === 'actions',
       errorsOnly: s.scope === 'issues',
-      missionOnly: s.missionOnly,
       categories: Array.from(s.activeCats),
     };
   }
@@ -162,7 +161,6 @@ class Viewer {
     if (f.search) p.set('search', f.search);
     if (f.actionsOnly) p.set('actions_only', '1');
     if (f.errorsOnly) p.set('errors_only', '1');
-    if (f.missionOnly) p.set('mission_only', '1');
     if (f.categories.length) p.set('category', f.categories.join(','));
     if (beforeId) p.set('before_id', String(beforeId));
     return `/audit/logs?${p.toString()}`;
@@ -471,7 +469,7 @@ class Viewer {
 
     const catActive = s.activeCats.size > 0;
     const catLabel = catActive ? `Категории · ${s.activeCats.size}` : 'Все категории';
-    const anyFilter = !!(s.search || s.activeCats.size || s.scope !== 'all' || s.missionOnly || s.range);
+    const anyFilter = !!(s.search || s.activeCats.size || s.scope !== 'all' || s.range);
     const rangeChip = s.range ? `${fmtMinute(new Date(s.range[0]))}–${fmtMinute(new Date(s.range[1]))}` : '';
 
     return `
@@ -486,14 +484,6 @@ class Viewer {
             <button class="scope-tab" data-scope="${k}" style="background:${s.scope === k ? '#ffffff14' : 'transparent'};color:${s.scope === k ? '#f1f2f4' : '#8b9199'}">${label}<span class="scope-tab-count" style="color:${s.scope === k ? '#8b9199' : '#5c626c'}">${counts[k]}</span></button>
           `).join('')}
         </div>
-
-        <button class="mission-toggle" data-toggle-mission style="${s.missionOnly
-          ? 'background:oklch(0.75 0.14 250 / 0.2);border-color:oklch(0.75 0.14 250 / 0.5);color:oklch(0.85 0.12 250)'
-          : 'background:#ffffff0a;border-color:#ffffff18;color:#9298a1'}">Только заявки</button>
-
-        <button class="mission-toggle" data-toggle-http style="${s.activeCats.size === 1 && s.activeCats.has('http')
-          ? 'background:oklch(0.75 0.13 160 / 0.2);border-color:oklch(0.75 0.13 160 / 0.5);color:oklch(0.85 0.12 160)'
-          : 'background:#ffffff0a;border-color:#ffffff18;color:#9298a1'}">Только HTTP</button>
 
         <div class="cat-menu-wrap">
           <button class="cat-menu-btn pt-item" data-toggle-catmenu style="background:${catActive ? 'oklch(0.75 0.14 250 / 0.16)' : '#15181d'};border-color:${catActive ? 'oklch(0.75 0.14 250 / 0.45)' : '#ffffff1a'};color:${catActive ? 'oklch(0.86 0.1 250)' : '#9298a1'}">${escapeHtml(catLabel)}<span style="color:#6b7178;font:10px system-ui">▾</span></button>
@@ -1000,18 +990,6 @@ class Viewer {
     root.querySelectorAll('[data-scope]').forEach((el) => {
       el.addEventListener('click', () => { s.scope = el.getAttribute('data-scope'); this.reloadLogs(); });
     });
-    const missionToggle = root.querySelector('[data-toggle-mission]');
-    if (missionToggle) missionToggle.addEventListener('click', () => { s.missionOnly = !s.missionOnly; this.reloadLogs(); });
-    const httpToggle = root.querySelector('[data-toggle-http]');
-    if (httpToggle) httpToggle.addEventListener('click', () => {
-      const isHttpOnly = s.activeCats.size === 1 && s.activeCats.has('http');
-      s.activeCats = isHttpOnly ? new Set() : new Set(['http']);
-      // http — не action-категория и не Mission*, поэтому scope=actions или
-      // missionOnly вместе с category=http всегда дают пустой результат —
-      // сбрасываем их при включении фильтра.
-      if (!isHttpOnly) { s.scope = 'all'; s.missionOnly = false; }
-      this.reloadLogs();
-    });
 
     const toggleCatMenu = root.querySelector('[data-toggle-catmenu]');
     if (toggleCatMenu) toggleCatMenu.addEventListener('click', () => { s.catMenuOpen = !s.catMenuOpen; this.render(); });
@@ -1030,7 +1008,7 @@ class Viewer {
     if (clearRange) clearRange.addEventListener('click', () => { s.range = null; this.render(); });
     const resetAll = root.querySelectorAll('[data-reset-all]');
     resetAll.forEach((el) => el.addEventListener('click', () => {
-      s.search = ''; s.activeCats = new Set(); s.scope = 'all'; s.missionOnly = false; s.range = null;
+      s.search = ''; s.activeCats = new Set(); s.scope = 'all'; s.range = null;
       this.reloadLogs();
     }));
 
