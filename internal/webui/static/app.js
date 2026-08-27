@@ -66,6 +66,16 @@ function debounce(fn, ms) {
 function isBinary(v) {
   return typeof v === 'string' && /^<binary \d+ bytes>$/.test(v);
 }
+// eventName у http-логов (и некоторых других source-логгеров) — это готовый
+// текст-дамп Talker'а: первая строка (метод/путь/статус), затем перевод
+// строки и весь JSON тела запроса/ответа. В названии нужна только первая
+// строка — тело и так доступно в отдельных блоках detail-панели (см. запрос
+// «в названии не нужно писать всё тело, занимает много места»).
+function titleFor(eventName) {
+  const s = String(eventName);
+  const i = s.indexOf('\n');
+  return i === -1 ? s : s.slice(0, i);
+}
 // Тело HTTP-запроса/ответа часто прилетает строкой с уже сериализованным
 // JSON (клиент не распарсил перед отправкой в audit) — раскрываем её в
 // дерево, а не показываем одной нечитаемой строкой (см. запрос «удобно
@@ -663,7 +673,7 @@ class Viewer {
         </div>
         <div><span class="cat-badge" style="background:${categoryColor(r.category, 0.14)};color:${categoryColor(r.category, 1)}">${escapeHtml(r.category)}</span></div>
         <div class="row-name-col">
-          <span class="row-name" style="font:${isAction ? 600 : 400} ${isAction ? 13 : 12}px system-ui;color:${isDisabledTap ? '#9298a1' : isAction ? '#f1f2f4' : '#959ba4'}">${escapeHtml(r.eventName)}</span>
+          <span class="row-name" style="font:${isAction ? 600 : 400} ${isAction ? 13 : 12}px system-ui;color:${isDisabledTap ? '#9298a1' : isAction ? '#f1f2f4' : '#959ba4'}">${escapeHtml(titleFor(r.eventName))}</span>
           <span class="row-meta">${escapeHtml(metaFor(r.category, r.payload))}</span>
         </div>
         <div class="row-badge-col">${badge ? `<span class="row-badge" style="color:${badgeColor};background:${badgeBg}">${escapeHtml(badge)}</span>` : ''}</div>
@@ -847,7 +857,7 @@ class Viewer {
               ${badge ? `<span class="row-badge" style="color:${badgeColor};background:${badgeBg}">${escapeHtml(badge)}</span>` : ''}
               <span class="detail-full-time">${escapeHtml(fmtFullTime(row.timestamp))}</span>
             </div>
-            <div class="detail-title">${escapeHtml(row.eventName)}</div>
+            <div class="detail-title">${escapeHtml(titleFor(row.eventName))}</div>
             ${hint ? `<div class="detail-hint" style="background:${hintBg};border-color:${hintBorder};color:${hintFg}">${escapeHtml(hint)}</div>` : ''}
           </div>
 
@@ -921,7 +931,7 @@ class Viewer {
     const s = this.state;
     const sel = s.rows.find((r) => r.id === s.selectedRowId);
     const statusLine = sel
-      ? `${fmtHms(sel.timestamp)} · ${sel.category} · ${sel.eventName}`
+      ? `${fmtHms(sel.timestamp)} · ${sel.category} · ${titleFor(sel.eventName)}`
       : s.rows.length
         ? `Страница ${fmtMinute(s.rows[0].timestamp)}–${fmtMinute(s.rows[s.rows.length - 1].timestamp)} · ${visible.length.toLocaleString('ru-RU')} событий в выборке`
         : 'Нет загруженных событий';
