@@ -157,6 +157,8 @@ class Viewer {
     this.rowNodes = {};
     this.scrollNode = null;
     this.tlNode = null;
+    this.detailNode = null;
+    this.lastDetailRowId = null;
     this.onSearchDebounced = debounce(() => this.reloadLogs(), 300);
     this.onKey = (e) => this.handleKey(e);
     window.addEventListener('keydown', this.onKey);
@@ -234,18 +236,18 @@ class Viewer {
     if (!userId || !this.state.rows.length || this.state.loadingOlder) return;
     this.state.loadingOlder = true;
     this.render();
-    const beforeId = this.state.rows[0].id;
-    const prevHeight = this.scrollNode ? this.scrollNode.scrollHeight : 0;
+    // rows отсортированы новые→старые (см. §4 гайда) — самая старая
+    // загруженная строка последняя в массиве, догружаем от неё вниз.
+    const beforeId = this.state.rows[this.state.rows.length - 1].id;
     try {
       const data = await api(this.buildLogsURL(userId, beforeId));
-      this.state.rows = (data.rows || []).concat(this.state.rows);
+      this.state.rows = this.state.rows.concat(data.rows || []);
       this.state.hasMoreOlder = !!data.hasMore;
     } catch (e) {
       this.state.error = String(e);
     }
     this.state.loadingOlder = false;
     this.render();
-    if (this.scrollNode) this.scrollNode.scrollTop += this.scrollNode.scrollHeight - prevHeight;
   }
 
   switchTech(userId) {
@@ -350,10 +352,12 @@ class Viewer {
   }
 
   seekToTime(t) {
+    // rows отсортированы новые→старые: первая строка не позже t (идя от
+    // начала списка) — самая свежая из подходящих, это и есть искомая.
     const list = this.state.rows;
     if (!list.length) return;
-    let best = list[0];
-    for (const r of list) { if (new Date(r.timestamp).getTime() <= t) best = r; else break; }
+    let best = list[list.length - 1];
+    for (const r of list) { if (new Date(r.timestamp).getTime() <= t) { best = r; break; } }
     this.selectRow(best.id);
   }
 
@@ -379,6 +383,15 @@ class Viewer {
     const restoreFocus = focused && focused.matches('[data-search], [data-tech-search]')
       ? { selector: focused.hasAttribute('data-search') ? '[data-search]' : '[data-tech-search]', pos: focused.selectionStart }
       : null;
+    // render() полностью пересобирает innerHTML (без виртуального DOM) —
+    // без этого любой чих (раскрыть узел дерева, скопировать текст) сбрасывал
+    // скролл списка и detail-панели в 0 (см. запрос «раскрытие данных
+    // перематывает вверх»). Скролл detail-панели сохраняем только пока
+    // открыта ТА ЖЕ строка — при выборе новой строки её панель должна
+    // открываться сверху.
+    const prevListScroll = this.scrollNode ? this.scrollNode.scrollTop : 0;
+    const sameDetailRow = this.lastDetailRowId === s.selectedRowId;
+    const prevDetailScroll = sameDetailRow && this.detailNode ? this.detailNode.scrollTop : 0;
 
     if (s.loading && !s.technicians.length) {
       this.root.innerHTML = `<div class="empty-state"><div class="empty-title">Загрузка…</div></div>`;
@@ -409,8 +422,8 @@ class Viewer {
       ${this.renderTimeline()}
       <div class="body-row">
         <div class="list-scroll pt-scroll" data-scroll>
-          ${s.hasMoreOlder ? `<button class="load-earlier" data-load-earlier ${s.loadingOlder ? 'disabled' : ''}>${s.loadingOlder ? 'Загрузка…' : 'Загрузить более ранние'}</button>` : ''}
           ${groups.length ? groups.map((g) => this.renderGroup(g)).join('') : this.renderEmptyList()}
+          ${s.hasMoreOlder ? `<button class="load-earlier" data-load-earlier ${s.loadingOlder ? 'disabled' : ''}>${s.loadingOlder ? 'Загрузка…' : 'Загрузить более ранние'}</button>` : ''}
         </div>
         ${this.renderDetail()}
       </div>
@@ -420,6 +433,10 @@ class Viewer {
 
     this.scrollNode = this.root.querySelector('[data-scroll]');
     this.tlNode = this.root.querySelector('[data-timeline]');
+    this.detailNode = this.root.querySelector('.detail-panel');
+    this.lastDetailRowId = s.selectedRowId;
+    if (this.scrollNode) this.scrollNode.scrollTop = prevListScroll;
+    if (this.detailNode && sameDetailRow) this.detailNode.scrollTop = prevDetailScroll;
     this.bind();
 
     if (restoreFocus) {
@@ -433,7 +450,7 @@ class Viewer {
     const q = s.techSearch.trim().toLowerCase();
     const items = s.technicians.filter((t) => !q || t.userId.toLowerCase().includes(q) || (t.userLabel || '').toLowerCase().includes(q));
     const initials = (label, id) => (label || id || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
-    const rangeStr = s.rows.length ? `${fmtMinute(s.rows[0].timestamp)}–${fmtMinute(s.rows[s.rows.length - 1].timestamp)}` : '';
+    const rangeStr = s.rows.length ? `${fmtMinute(s.rows[s.rows.length - 1].timestamp)}–${fmtMinute(s.rows[0].timestamp)}` : '';
 
     return `
       <div class="topbar">
@@ -566,8 +583,10 @@ class Viewer {
     if (!rows.length) {
       return `<div class="timeline-wrap"><div class="timeline-caption">Нет загруженных событий</div></div>`;
     }
-    const t0 = new Date(rows[0].timestamp).getTime();
-    const t1 = new Date(rows[rows.length - 1].timestamp).getTime();
+    // rows отсортированы новые→старые — для оси времени (слева-направо =
+    // раньше→позже) t0/t1 берём по факту, не по позиции в массиве.
+    const t0 = new Date(rows[rows.length - 1].timestamp).getTime();
+    const t1 = new Date(rows[0].timestamp).getTime();
     const span = Math.max(t1 - t0, 1);
 
     const N = 132;
@@ -589,7 +608,7 @@ class Viewer {
 
     const hourTicks = [];
     const step = span > 3600000 ? 1800000 : 60000;
-    const start = new Date(rows[0].timestamp); start.setSeconds(0, 0);
+    const start = new Date(rows[rows.length - 1].timestamp); start.setSeconds(0, 0);
     for (let c = start.getTime(); c <= t1; c += step) {
       const left = ((c - t0) / span) * 100;
       if (left < 0) continue;
@@ -891,7 +910,7 @@ class Viewer {
                 <span class="text-block-note">${escapeHtml(tr.note)}</span>
                 <button class="text-block-copy pt-item" data-copy-tree="${rowKey(tr.key)}">${escapeHtml(tr.copyLabel)}</button>
               </div>
-              <div class="tree-box pt-scroll" style="max-height:340px">
+              <div class="tree-box pt-scroll">
                 ${tr.nodes.map((n) => `
                   <div class="tree-node pt-node" ${n.path ? `data-tree-toggle="${escapeHtml(n.path)}"` : ''} style="padding-left:${n.indent}px;cursor:${n.cursor}">
                     <span class="tree-chev">${n.chev}</span>
@@ -933,7 +952,7 @@ class Viewer {
     const statusLine = sel
       ? `${fmtHms(sel.timestamp)} · ${sel.category} · ${titleFor(sel.eventName)}`
       : s.rows.length
-        ? `Страница ${fmtMinute(s.rows[0].timestamp)}–${fmtMinute(s.rows[s.rows.length - 1].timestamp)} · ${visible.length.toLocaleString('ru-RU')} событий в выборке`
+        ? `Страница ${fmtMinute(s.rows[s.rows.length - 1].timestamp)}–${fmtMinute(s.rows[0].timestamp)} · ${visible.length.toLocaleString('ru-RU')} событий в выборке`
         : 'Нет загруженных событий';
     return `
       <div class="statusbar">
@@ -1052,8 +1071,8 @@ class Viewer {
     // ---- density timeline drag / hover / click-seek ----
     const tl = root.querySelector('[data-timeline]');
     if (tl && s.rows.length) {
-      const t0 = new Date(s.rows[0].timestamp).getTime();
-      const t1 = new Date(s.rows[s.rows.length - 1].timestamp).getTime();
+      const t0 = new Date(s.rows[s.rows.length - 1].timestamp).getTime();
+      const t1 = new Date(s.rows[0].timestamp).getTime();
       const span = Math.max(t1 - t0, 1);
       tl.addEventListener('mousedown', (e) => { const f = this.tlFrac(e); s.dragFrom = f; s.dragTo = f; this.render(); });
       tl.addEventListener('mousemove', (e) => {
