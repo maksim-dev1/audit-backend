@@ -51,6 +51,16 @@ function debounce(fn, ms) {
 function isBinary(v) {
   return typeof v === 'string' && /^<binary \d+ bytes>$/.test(v);
 }
+// Тело HTTP-запроса/ответа часто прилетает строкой с уже сериализованным
+// JSON (клиент не распарсил перед отправкой в audit) — раскрываем её в
+// дерево, а не показываем одной нечитаемой строкой (см. запрос «удобно
+// просматривать тело запросов»).
+function tryParseJSON(s) {
+  if (typeof s !== 'string') return undefined;
+  const t = s.trim();
+  if (!t || (t[0] !== '{' && t[0] !== '[')) return undefined;
+  try { return JSON.parse(t); } catch (e) { return undefined; }
+}
 
 async function api(path) {
   const res = await fetch(path);
@@ -712,16 +722,17 @@ class Viewer {
         trees.push({ key: 'query', title: 'Query-параметры', value: p.query });
       }
       consumed.add('query');
-      if (p.requestBody !== undefined && p.requestBody !== null) {
-        consumed.add('requestBody');
-        if (typeof p.requestBody === 'object') trees.push({ key: 'requestBody', title: 'Тело запроса', value: p.requestBody });
-        else textBlocks.push({ key: 'requestBody', title: 'Тело запроса', text: String(p.requestBody), note: `${String(p.requestBody).length} символов` });
-      } else consumed.add('requestBody');
-      if (p.responseBody !== undefined && p.responseBody !== null) {
-        consumed.add('responseBody');
-        if (typeof p.responseBody === 'object') trees.push({ key: 'responseBody', title: 'Ответ сервера', value: p.responseBody });
-        else textBlocks.push({ key: 'responseBody', title: 'Ответ сервера', text: String(p.responseBody), note: '' });
-      } else consumed.add('responseBody');
+      const pushBody = (key, title, body) => {
+        consumed.add(key);
+        if (body === undefined || body === null) return;
+        if (typeof body === 'object') { trees.push({ key, title, value: body }); return; }
+        const bin = isBinary(body);
+        const parsed = bin ? undefined : tryParseJSON(body);
+        if (parsed !== undefined) trees.push({ key, title, value: parsed });
+        else textBlocks.push({ key, title, text: String(body), note: bin ? 'бинарный блок' : `${String(body).length} символов` });
+      };
+      pushBody('requestBody', 'Тело запроса', p.requestBody);
+      pushBody('responseBody', 'Ответ сервера', p.responseBody);
     }
 
     if (p && typeof p === 'object') {
