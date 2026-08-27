@@ -56,8 +56,8 @@ warning за всё время с переходом к моменту, дета
 - `GET /audit/technicians/timeline?user_id=` — все warning/error записи техника
   (без payload) для полосы таймлайна.
 - `GET /audit/logs?user_id=&search=&category=a,b&actions_only=1&errors_only=1&mission_only=1&before_id=&limit=`
-  — страница записей (id DESC на бэкенде, разворачивается в хронологический
-  порядок в ответе); `before_id` — keyset-пагинация «догрузить более старые».
+  — страница записей, новые сверху (id DESC); `before_id` — keyset-пагинация
+  «догрузить более старые» (id последней строки предыдущей страницы).
 
 ## Тесты
 
