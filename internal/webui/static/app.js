@@ -1017,8 +1017,6 @@ class Viewer {
       el.addEventListener('click', () => { s.scope = el.getAttribute('data-scope'); this.reloadLogs(); });
     });
 
-    const toggleCatMenu = root.querySelector('[data-toggle-catmenu]');
-    if (toggleCatMenu) toggleCatMenu.addEventListener('click', () => { s.catMenuOpen = !s.catMenuOpen; this.render(); });
     root.querySelectorAll('[data-toggle-catmenu]').forEach((el) => el.addEventListener('click', () => { s.catMenuOpen = !s.catMenuOpen; this.render(); }));
     root.querySelectorAll('[data-toggle-cat]').forEach((el) => {
       el.addEventListener('click', () => {
